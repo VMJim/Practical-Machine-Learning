@@ -2,4 +2,4 @@
 
 ## Contents
 + R markdown file describing the followed analysis.
-+ Compiled HTML version.
++ Compiled HTML version: <http://vmjim.github.io/Practical-Machine-Learning/my-analysis.html>
