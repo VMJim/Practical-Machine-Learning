@@ -124,7 +124,8 @@ Next, we take a look at *what should be* (see **caveat** below) the 2-times-10-f
 ```{r, echo = FALSE}
 rf.fit$results[2,] # 2 as this corresponds to the best model.
 ```
-There's also the out-of-the-bag error ([OOB](http://stackoverflow.com/questions/18541923/what-is-out-of-bag-error-in-random-forests)) estimate of the accuracy of the final model that equals `r sum(diag(rf.fit$finalModel$confusion[1:5,1:5]))/sum(rf.fit$finalModel$confusion[1:5,1:5])`. This is very close to the 2-times-10-fold CV estimate.
+There's also the out-of-the-bag error ( [OOB](http://stackoverflow.com/questions/18541923/what-is-out-of-bag-error-in-random-forests) ) estimate of the accuracy of the final model that equals  
+`r sum(diag(rf.fit$finalModel$confusion[1:5,1:5]))/sum(rf.fit$finalModel$confusion[1:5,1:5])`. This is very close to the 2-times-10-fold CV estimate.
 
 # Predicting Actvivity
 The CV estimate of the classification accuracy could very well be optimistically biased because we used it to fit the model's hyperparameter on. To get an unbiased estimate of the random forest's generalizability (in terms of accuracy) we predict the `validationSample` that we set aside at the beginning. This produces the following confusion matrix
@@ -143,4 +144,3 @@ In retrospect this assignment is more about data cleaning than actual machine le
 A suggestion for further modeling would be to do a principal component analysis (PCA) on all variables that end in x,y or z (regex: `(x|y|z)$`) since some are strongly correlated. If possible and desired, this could result in a simpler and more robust model.
 
 **CAVEAT**: _"caret version 6.0-47 and R Under development (**unstable**)"_ (emphasis added), small print from <http://topepo.github.io/caret/>. I would agree.
-
