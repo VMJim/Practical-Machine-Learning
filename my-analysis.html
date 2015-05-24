@@ -77,7 +77,7 @@ testSet  &lt;- read.csv(file = &quot;pml-testing.csv&quot;, stringsAsFactors = F
 <p>The only viable option is removal of the problematic variables (columns). This works well, because they have missings on the same observations (cases <em>aka</em> rows).</p>
 <div id="training-set-cleaning" class="section level2">
 <h2>Training Set Cleaning</h2>
-<p>The foregoing leads us to fixing a imputation threshold:</p>
+<p>The foregoing leads us to fixing an imputation threshold:</p>
 <ul>
 <li><strong>if</strong> more than the threshold is missing: delete the variable.<br /></li>
 <li><strong>else</strong>: impute.</li>
@@ -138,10 +138,10 @@ registerDoParallel(cores = 4)</code></pre>
 train.ids        &lt;- createDataPartition(trainSet$classe, p = 0.8, list = F)
 trainSample      &lt;- trainSet[train.ids,]
 validationSample &lt;- trainSet[-train.ids,]</code></pre>
-<p>Next, we construct a <code>trainControl</code> object that controls the resampling method that we use for training our model(s). 10-fold cross-validation (CV) is by far the most used method, as it is computationally inexpensive (vis-a-vis leave-one-out) and produces good estimates of the generalization error (GE) (validated in many studies). To reduce the variance of this GE estimate slightly more, we opt for repeating 10-fold CV twice.</p>
+<p>Next, we construct a <code>trainControl</code> object that controls the resampling method that we use for training our model(s). 10-fold cross-validation (CV) is one of the most popular methods, as it is computationally inexpensive (vis-a-vis leave-one-out) and produces good estimates of the generalization error (GE) (validated in many studies). To reduce the variance of this GE estimate slightly more, we opt for repeating 10-fold CV twice.</p>
 <pre class="r"><code>twoTenFoldCV &lt;- trainControl(method = &quot;cv&quot;, number = 10, repeats = 2)</code></pre>
-<p>This comes down to re-estimating each model 20-times on different partitions of the data in order to tune the hyperparameter(s) (i.e. the parameters that control the behavior of the other parameters).</p>
-<p>E.g., in case of a <code>randomForest</code>, <code>mtry</code> = <em>“The number of variables randomly sampled as candidates at each split”</em> is the hyperparameter we will estimate via CV. (There are some others as well, e.g. <code>ntrees</code> that we hold fixed at their defaults, for all the details see the <a href="http://cran.r-project.org/web/packages/randomForest/">randomForest documentation</a>.)</p>
+<p>This comes down to re-estimating the model 20-times on different partitions of the data in order to tune the hyperparameter(s) (i.e. the parameters that control the behavior of the other parameters).</p>
+<p>For example, in case of a <code>randomForest</code>, <code>mtry =</code> “The number of variables randomly sampled as candidates at each split” is the hyperparameter we will estimate via CV. (There are other hyperparameters as well, e.g. <code>ntrees</code>, that we hold fixed at their defaults. For all the details see the <a href="http://cran.r-project.org/web/packages/caret/index.html">caret</a> and <a href="http://cran.r-project.org/web/packages/randomForest/">randomForest</a> documentation.)</p>
 <p>We now estimate the first model: a random forest (RF).</p>
 <pre class="r"><code>set.seed(77137)
 start.time &lt;- Sys.time()
@@ -154,11 +154,11 @@ timeTakenBy.rf &lt;- Sys.time() - start.time</code></pre>
 <p>Next, we take a look at <em>what should be</em> (see <strong>caveat</strong> below) the 2-times-10-fold CV estimate of the <em>accuracy</em> of our random forest:</p>
 <pre><code>##   mtry Accuracy     Kappa  AccuracySD     KappaSD
 ## 2   30 0.994331 0.9928284 0.002215644 0.002804011</code></pre>
-<p>There’s also the <a href="http://stackoverflow.com/questions/18541923/what-is-out-of-bag-error-in-random-forests">OOB</a> estimate of the accuracy of the final model: 0.9943308. Which is very close to the 2-times-10-fold CV estimate.</p>
+<p>There’s also the out-of-the-bag error (<a href="http://stackoverflow.com/questions/18541923/what-is-out-of-bag-error-in-random-forests">OOB</a>) estimate of the accuracy of the final model that equals 0.9943308. This is very close to the 2-times-10-fold CV estimate.</p>
 </div>
 <div id="predicting-actvivity" class="section level1">
 <h1>Predicting Actvivity</h1>
-<p>The CV estimate of the generalizabilty could very well be optimistically biased because we used it to fit the model’s hyperparameter on. To get an unbiased estimate of the random forest’s generalizability (in terms of accuracy) we predict the <code>validationSample</code> that we set aside at the beginning. This gives us the following confusion matrix:</p>
+<p>The CV estimate of the classification accuracy could very well be optimistically biased because we used it to fit the model’s hyperparameter on. To get an unbiased estimate of the random forest’s generalizability (in terms of accuracy) we predict the <code>validationSample</code> that we set aside at the beginning. This produces the following confusion matrix</p>
 <pre><code>##           Reference
 ## Prediction    A    B    C    D    E
 ##          A 1115    1    0    0    0
@@ -166,14 +166,14 @@ timeTakenBy.rf &lt;- Sys.time() - start.time</code></pre>
 ##          C    0    3  680    3    0
 ##          D    0    1    1  639    0
 ##          E    0    0    0    1  721</code></pre>
-<p>And unbiased accuracy estimate equal to 0.9964313. This accuracy is so high, that our random forest suffices and no further modelling needs to be done. This view is re-enforced by a 100 percent accuracy on the 20 cases in the <code>testSet</code> of which the outcome “classe” was unknown to us at the outset.</p>
+<p>and an unbiased estimate of accuracy equal to 0.9964313. This accuracy is so high, that our random forest suffices and no further modeling needs to be done. This view is re-enforced by a 100 percent accuracy on the 20 cases in the <code>testSet</code> of which the outcome “classe” was unknown to us at the outset.</p>
 </div>
 <div id="discussion" class="section level1">
 <h1>Discussion</h1>
 <p>Other models were estimated/learned as well: multinomial regression (<code>glmnet</code>), generalized boosted regression (<code>gbm</code>), a support vector machine with radial kernel (<code>svmRadial</code>), a neural network (<code>nnet</code>). Only gbm has performance in the neighborhood of RF. However, a simple ensemble of gbm and RF does not improve accuracy appreciably (therefore omitted).</p>
 <p>In retrospect this assignment is more about data cleaning than actual machine learning – at least when you clean the data properly and start with a random forest.</p>
-<p>A suggestion for further modeling would be to do a principal component analysis (PCA) on all variables that end in x,y or z (regex: <code>(x|y|z)$</code>) since some seem strongly correlated. If possible and desired, this could result in a simpler and more robust model.</p>
-<p><strong>CAVEAT</strong>: <em>“caret version 6.0-47 and R Under development (<strong>unstable</strong>)”</em>(emphasis added), from <a href="http://topepo.github.io/caret/" class="uri">http://topepo.github.io/caret/</a>. I would agree.</p>
+<p>A suggestion for further modeling would be to do a principal component analysis (PCA) on all variables that end in x,y or z (regex: <code>(x|y|z)$</code>) since some are strongly correlated. If possible and desired, this could result in a simpler and more robust model.</p>
+<p><strong>CAVEAT</strong>: <em>“caret version 6.0-47 and R Under development (<strong>unstable</strong>)”</em> (emphasis added), small print from <a href="http://topepo.github.io/caret/" class="uri">http://topepo.github.io/caret/</a>. I would agree.</p>
 </div>
 
 
