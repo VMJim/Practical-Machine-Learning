@@ -1,5 +1,146 @@
-# Predicting Actvivity
+---
+title: "Human Activity Recognition"
+output: html_document
+---
 
-# Cleaning the Data
+This report describes the basic machine learning steps needed to predict the "classe" variable (activity) in the referenced datasets below.
+
+# Data: Inspection and Cleaning
+The data we will be working with come from these sources: <http://groupware.les.inf.puc-rio.br/har>, [training data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv), [test data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
+
+We first load the training data (assuming the file is saved in your working directory):
+```{r, cache = TRUE}
+trainSet <- read.csv(file = "pml-training.csv", stringsAsFactors = F, header = T)
+testSet  <- read.csv(file = "pml-testing.csv", stringsAsFactors = F, header = T)
+```
+```{r, echo = FALSE}
+numCol.full <- ncol(trainSet)
+numRow.full <- nrow(trainSet)
+```
+Using `View(trainSet)`, we see that there are a lot of missing values in certain columns. We have to decide to delete observations, impute missing values, or remove entire columns. 
+
+Deleting cases is disastrous in this case as we would be left with only `r round(100*sum(complete.cases(trainSet))/nrow(trainSet),digits=1)` percent of our data.
+
+Imputing is not logical here, because the problematic columns only contain `r round(100*sum(complete.cases(trainSet))/nrow(trainSet),digits=1)` percent actual, non-missing values from which we could not reasonably expect to impute the remaining `r round(100 - 100*sum(complete.cases(trainSet))/nrow(trainSet),digits=1)` percent missings. We could get the numbers, but they would not mean very much.
+
+The only viable option is removal of the problematic variables (columns). This works well, because they have missings on the same observations (cases *aka* rows).
+
+## Training Set Cleaning
+The foregoing leads us to fixing a imputation threshold: 
+
+- **if** more than the threshold is missing: delete the variable.  
+- **else**: impute. 
+
+We keep variables (columns) that have less than 20 percent missings -- as these could be reasonably imputed.
+```{r}
+impute.threshold  <- 0.2
+keepTrain.col.idx <- colMeans(is.na(trainSet) | trainSet=="") < impute.threshold # keep these
+```
+This results in removing `r 100*(1 - sum(keepTrain.col.idx)/numCol.full)` percent of the original variables.
+```{r}
+trainSet <- trainSet[,keepTrain.col.idx]
+# sanity check:
+summary(mean(complete.cases(trainSet))) # all remaining cases (observations) are complete
+```
+We find, that all cases are now completely observed, i.e. have no missings.
+
+Next, we remove variables that either have no intrinsic meaning or that are not useful for further modelling.
+```{r}
+trainSet$X <- NULL
+trainSet$cvtd_timestamp <- NULL
+trainSet$raw_timestamp_part_1 <- NULL
+trainSet$raw_timestamp_part_2 <- NULL
+trainSet$num_window <- NULL
+```
+Finally, we factorize the categorical variables:
+```{r}
+trainSet$classe     <- as.factor(trainSet$classe)
+trainSet$user_name  <- as.factor(trainSet$user_name)
+trainSet$new_window <- as.factor(trainSet$new_window)
+```
+This concludes the cleaning part of the training set.
+
+## Test Set Cleaning: Same Recipe
+Now we simply repeat the cleaning steps of the training set in the test set.
+```{r}
+keepTest.col.idx <- colMeans(is.na(testSet) | testSet=="" ) < impute.threshold
+testSet <- testSet[,keepTest.col.idx]
+# sanity check:
+summary(mean(complete.cases(testSet))) # yes, they're all complete
+```
+All cases are now completely observed in the test set.
+
+The next step is not necessary, but saves some memory.
+```{r}
+testSet$X <- NULL
+testSet$cvtd_timestamp <- NULL
+testSet$raw_timestamp_part_1 <- NULL
+testSet$raw_timestamp_part_2 <- NULL
+testSet$num_window <- NULL
+```
+Finally, we factorize the categorical variables.
+```{r}
+testSet$user_name  <- as.factor(testSet$user_name)
+testSet$new_window <- as.factor(testSet$new_window)
+```
+The data is now ready for model estimation. 
 
 # Basic Machine Learning
+Load required packages and set-up R for parallel computing.
+```{r, message = FALSE}
+library(doParallel)
+library(caret)
+
+registerDoParallel(cores = 4)
+```
+Then create a train and validation split of the **training set**, where we use 80 percent to train on and hold 20 percent out for validation. (At first a 50 percent partition was used, but training times turned out better than expected, so the number was increased to 80.)
+```{r}
+set.seed(21198801) # or your favorite number
+train.ids        <- createDataPartition(trainSet$classe, p = 0.8, list = F)
+trainSample      <- trainSet[train.ids,]
+validationSample <- trainSet[-train.ids,]
+```
+Next, we construct a `trainControl` object that controls the resampling method that we use for training our model(s). 10-fold cross-validation (CV) is by far the most used method, as it is computationally inexpensive (vis-a-vis leave-one-out) and produces good estimates of the generalization error (GE) (validated in many studies). To reduce the variance of this GE estimate slightly more, we opt for repeating 10-fold CV twice.
+```{r}
+twoTenFoldCV <- trainControl(method = "cv", number = 10, repeats = 2)
+```
+This comes down to re-estimating each model 20-times on different partitions of the data in order to tune the hyperparameter(s) (i.e. the parameters that control the behavior of the other parameters). 
+
+E.g., in case of a `randomForest`, `mtry` = *"The number of variables randomly sampled as candidates at each split"* is the hyperparameter we will estimate via CV. (There are some others as well, e.g. `ntrees` that we hold fixed at their defaults, for all the details see the [randomForest documentation](http://cran.r-project.org/web/packages/randomForest/).)
+
+We now estimate the first model: a random forest (RF).
+```{r, cache = TRUE, message = FALSE}
+set.seed(77137)
+start.time <- Sys.time()
+
+rf.fit <- train(classe ~ ., data = trainSample, method = "rf", trControl = twoTenFoldCV)
+#saveRDS(rf.fit, file = "./rand_forest_fit2")
+
+timeTakenBy.rf <- Sys.time() - start.time
+```
+On our (my) machine this takes "`r round(timeTakenBy.rf, digits = 2)`" minutes. 
+
+Next, we take a look at *what should be* (see **caveat** below) the 2-times-10-fold CV estimate of the *accuracy* of our random forest: 
+```{r, echo = FALSE}
+rf.fit$results[2,] # 2 as this corresponds to the best model.
+```
+There's also the [OOB](http://stackoverflow.com/questions/18541923/what-is-out-of-bag-error-in-random-forests) estimate of the accuracy of the final model: `r sum(diag(rf.fit$finalModel$confusion[1:5,1:5]))/sum(rf.fit$finalModel$confusion[1:5,1:5])`. Which is very close to the 2-times-10-fold CV estimate.
+
+# Predicting Actvivity
+The CV estimate of the generalizabilty could very well be optimistically biased because we used it to fit the model's hyperparameter on. To get an unbiased estimate of the random forest's generalizability (in terms of accuracy) we predict the `validationSample` that we set aside at the beginning. This gives us the following confusion matrix:
+```{r, echo = FALSE, message = FALSE}
+myPred.rf   <- predict.train(rf.fit, newdata = validationSample) # read as: "predict a train object"
+rf.conf.mat <- confusionMatrix(myPred.rf, reference = validationSample$classe)
+rf.conf.mat$table
+```
+And unbiased accuracy estimate equal to `r rf.conf.mat$overall[[1]]`. This accuracy is so high, that our random forest suffices and no further modelling needs to be done. This view is re-enforced by a 100 percent accuracy on the 20 cases in the `testSet` of which the outcome "classe" was unknown to us at the outset.
+
+# Discussion
+Other models were estimated/learned as well: multinomial regression (`glmnet`), generalized boosted regression (`gbm`), a support vector machine with radial kernel (`svmRadial`), a neural network (`nnet`). Only gbm has performance in the neighborhood of RF. However, a simple ensemble of gbm and RF does not improve accuracy appreciably (therefore omitted).
+
+In retrospect this assignment is more about data cleaning than actual machine learning -- at least when you clean the data properly and start with a random forest.
+
+A suggestion for further modeling would be to do a principal component analysis (PCA) on all variables that end in x,y or z (regex: `(x|y|z)$`) since some are strongly correlated. If possible and desired, this could result in a simpler and more robust model.
+
+**CAVEAT**: _"caret version 6.0-47 and R Under development (**unstable**)"_ (emphasis added), small print from <http://topepo.github.io/caret/>. I would agree.
+
