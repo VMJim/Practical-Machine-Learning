@@ -1,2 +1,5 @@
 # Practical-Machine-Learning
-My Project Write Up Submission
+
+## Contents
++ R markdown file describing the followed analysis.
++ Compiled HTML version.
