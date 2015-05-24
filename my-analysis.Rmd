@@ -26,7 +26,7 @@ Imputing is not logical here, because the problematic columns only contain `r ro
 The only viable option is removal of the problematic variables (columns). This works well, because they have missings on the same observations (cases *aka* rows).
 
 ## Training Set Cleaning
-The foregoing leads us to fixing a imputation threshold: 
+The foregoing leads us to fixing an imputation threshold: 
 
 - **if** more than the threshold is missing: delete the variable.  
 - **else**: impute. 
@@ -100,13 +100,13 @@ train.ids        <- createDataPartition(trainSet$classe, p = 0.8, list = F)
 trainSample      <- trainSet[train.ids,]
 validationSample <- trainSet[-train.ids,]
 ```
-Next, we construct a `trainControl` object that controls the resampling method that we use for training our model(s). 10-fold cross-validation (CV) is by far the most used method, as it is computationally inexpensive (vis-a-vis leave-one-out) and produces good estimates of the generalization error (GE) (validated in many studies). To reduce the variance of this GE estimate slightly more, we opt for repeating 10-fold CV twice.
+Next, we construct a `trainControl` object that controls the resampling method that we use for training our model(s). 10-fold cross-validation (CV) is one of the most popular methods, as it is computationally inexpensive (vis-a-vis leave-one-out) and produces good estimates of the generalization error (GE) (validated in many studies). To reduce the variance of this GE estimate slightly more, we opt for repeating 10-fold CV twice.
 ```{r}
 twoTenFoldCV <- trainControl(method = "cv", number = 10, repeats = 2)
 ```
-This comes down to re-estimating each model 20-times on different partitions of the data in order to tune the hyperparameter(s) (i.e. the parameters that control the behavior of the other parameters). 
+This comes down to re-estimating the model 20-times on different partitions of the data in order to tune the hyperparameter(s) (i.e. the parameters that control the behavior of the other parameters). 
 
-E.g., in case of a `randomForest`, `mtry` = *"The number of variables randomly sampled as candidates at each split"* is the hyperparameter we will estimate via CV. (There are some others as well, e.g. `ntrees` that we hold fixed at their defaults, for all the details see the [randomForest documentation](http://cran.r-project.org/web/packages/randomForest/).)
+For example, in case of a `randomForest`,  `mtry =` "The number of variables randomly sampled as candidates at each split" is the hyperparameter we will estimate via CV. (There are other hyperparameters as well, e.g. `ntrees`, that we hold fixed at their defaults. For all the details see the [caret](http://cran.r-project.org/web/packages/caret/index.html) and [randomForest](http://cran.r-project.org/web/packages/randomForest/) documentation.)
 
 We now estimate the first model: a random forest (RF).
 ```{r, cache = TRUE, message = FALSE}
@@ -124,16 +124,16 @@ Next, we take a look at *what should be* (see **caveat** below) the 2-times-10-f
 ```{r, echo = FALSE}
 rf.fit$results[2,] # 2 as this corresponds to the best model.
 ```
-There's also the [OOB](http://stackoverflow.com/questions/18541923/what-is-out-of-bag-error-in-random-forests) estimate of the accuracy of the final model: `r sum(diag(rf.fit$finalModel$confusion[1:5,1:5]))/sum(rf.fit$finalModel$confusion[1:5,1:5])`. Which is very close to the 2-times-10-fold CV estimate.
+There's also the out-of-the-bag error ([OOB](http://stackoverflow.com/questions/18541923/what-is-out-of-bag-error-in-random-forests)) estimate of the accuracy of the final model that equals `r sum(diag(rf.fit$finalModel$confusion[1:5,1:5]))/sum(rf.fit$finalModel$confusion[1:5,1:5])`. This is very close to the 2-times-10-fold CV estimate.
 
 # Predicting Actvivity
-The CV estimate of the generalizabilty could very well be optimistically biased because we used it to fit the model's hyperparameter on. To get an unbiased estimate of the random forest's generalizability (in terms of accuracy) we predict the `validationSample` that we set aside at the beginning. This gives us the following confusion matrix:
+The CV estimate of the classification accuracy could very well be optimistically biased because we used it to fit the model's hyperparameter on. To get an unbiased estimate of the random forest's generalizability (in terms of accuracy) we predict the `validationSample` that we set aside at the beginning. This produces the following confusion matrix
 ```{r, echo = FALSE, message = FALSE}
 myPred.rf   <- predict.train(rf.fit, newdata = validationSample) # read as: "predict a train object"
 rf.conf.mat <- confusionMatrix(myPred.rf, reference = validationSample$classe)
 rf.conf.mat$table
 ```
-And unbiased accuracy estimate equal to `r rf.conf.mat$overall[[1]]`. This accuracy is so high, that our random forest suffices and no further modelling needs to be done. This view is re-enforced by a 100 percent accuracy on the 20 cases in the `testSet` of which the outcome "classe" was unknown to us at the outset.
+and an unbiased estimate of accuracy equal to `r rf.conf.mat$overall[[1]]`. This accuracy is so high, that our random forest suffices and no further modeling needs to be done. This view is re-enforced by a 100 percent accuracy on the 20 cases in the `testSet` of which the outcome "classe" was unknown to us at the outset.
 
 # Discussion
 Other models were estimated/learned as well: multinomial regression (`glmnet`), generalized boosted regression (`gbm`), a support vector machine with radial kernel (`svmRadial`), a neural network (`nnet`). Only gbm has performance in the neighborhood of RF. However, a simple ensemble of gbm and RF does not improve accuracy appreciably (therefore omitted).
